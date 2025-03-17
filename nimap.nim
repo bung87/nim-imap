@@ -104,12 +104,12 @@ proc send(client: ImapClient | AsyncImapClient, cmd: string, listener: ImapListe
     result = await client.getData(tag, listener)
 
 
-proc connect*(client: ImapClient | AsyncImapClient, host: string, port: Port, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc connect*(client: ImapClient | AsyncImapClient, host: string, port: Port, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     await client.socket.connect(host, port)
     result = await client.getData("*", listener)
     
     
-proc capability*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc capability*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.1.1.  CAPABILITY Command
     ##
     ## The CAPABILITY command requests a listing of capabilities that the
@@ -142,7 +142,7 @@ proc capability*(client: ImapClient | AsyncImapClient, listener: ImapListener = 
     result = await client.send("CAPABILITY", listener)
 
 
-proc noop*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc noop*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.1.2.  NOOP Command
     ##
     ## The NOOP command always succeeds.  It does nothing.
@@ -156,7 +156,7 @@ proc noop*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): 
     result = await client.send("NOOP", listener)
 
 
-proc logout*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc logout*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.1.3.  LOGOUT Command
     ##
     ## The LOGOUT command informs the server that the client is done with
@@ -167,7 +167,7 @@ proc logout*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil)
     result = await client.send("LOGOUT", listener)
     
     
-proc starttls*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc starttls*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.2.1.  STARTTLS Command
     ##
     ## A [TLS] negotiation begins immediately after the CRLF at the end
@@ -191,7 +191,7 @@ proc starttls*(client: ImapClient | AsyncImapClient, listener: ImapListener = ni
     result = await client.send("STARTTLS", listener)
 
 
-proc authenticate*(client: ImapClient | AsyncImapClient, mechanism, data: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc authenticate*(client: ImapClient | AsyncImapClient, mechanism, data: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.2.2.  AUTHENTICATE Command
     ##
     ## The AUTHENTICATE command indicates a [SASL] authentication
@@ -279,7 +279,7 @@ proc authenticate*(client: ImapClient | AsyncImapClient, mechanism, data: string
     result = await client.send(cmd, listener)
 
 
-proc login*(client: ImapClient | AsyncImapClient, username, password: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc login*(client: ImapClient | AsyncImapClient, username, password: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.2.3.  LOGIN Command
     ##
     ## The LOGIN command identifies the client to the server and carries
@@ -313,7 +313,7 @@ proc login*(client: ImapClient | AsyncImapClient, username, password: string, li
     result = await client.send("LOGIN " & username & " " & password, listener)
 
 
-proc select*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc select*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.1.  SELECT Command
     ##
     ## The SELECT command selects a mailbox so that messages in the
@@ -348,7 +348,7 @@ proc select*(client: ImapClient | AsyncImapClient, mailbox: string, listener: Im
     result = await client.send("SELECT " & mailbox, listener)
 
 
-proc examine*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc examine*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.2.  EXAMINE Command
     ##
     ## The EXAMINE command is identical to SELECT and returns the same
@@ -363,7 +363,7 @@ proc examine*(client: ImapClient | AsyncImapClient, mailbox: string, listener: I
     result = await client.send("EXAMINE " & mailbox, listener)
 
 
-proc create*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc create*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.3.  CREATE Command
     ##
     ## The CREATE command creates a mailbox with the given name.  An OK
@@ -404,7 +404,7 @@ proc create*(client: ImapClient | AsyncImapClient, mailbox: string, listener: Im
     result = await client.send("CREATE " & mailbox, listener)
 
     
-proc delete*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc delete*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.4.  DELETE Command
     ##
     ## The DELETE command permanently removes the mailbox with the given
@@ -435,7 +435,7 @@ proc delete*(client: ImapClient | AsyncImapClient, mailbox: string, listener: Im
     result = await client.send("DELETE " & mailbox, listener)
     
 
-proc rename*(client: ImapClient | AsyncImapClient, oldname, newname: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc rename*(client: ImapClient | AsyncImapClient, oldname, newname: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.5.  RENAME Command
     ##
     ## The RENAME command changes the name of a mailbox.  A tagged OK
@@ -472,7 +472,7 @@ proc rename*(client: ImapClient | AsyncImapClient, oldname, newname: string, lis
     result = await client.send("RENAME " & oldname & " " & newname, listener)
     
     
-proc subscribe*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc subscribe*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.6.  SUBSCRIBE Command
     ##
     ## The SUBSCRIBE command adds the specified mailbox name to the
@@ -494,7 +494,7 @@ proc subscribe*(client: ImapClient | AsyncImapClient, mailbox: string, listener:
     result = await client.send("SUBSCRIBE " & mailbox, listener)
     
     
-proc unsubscribe*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc unsubscribe*(client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.7.  UNSUBSCRIBE Command
     ##
     ## The UNSUBSCRIBE command removes the specified mailbox name from
@@ -505,7 +505,7 @@ proc unsubscribe*(client: ImapClient | AsyncImapClient, mailbox: string, listene
     result = await client.send("UNSUBSCRIBE " & mailbox, listener)
 
 
-proc list*(client: ImapClient | AsyncImapClient, reference: string = "\"\"", mailbox: string = "\"*\"", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc list*(client: ImapClient | AsyncImapClient, reference: string = "\"\"", mailbox: string = "\"*\"", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.8.  LIST Command
     ##
     ## The LIST command returns a subset of names from the complete set
@@ -587,7 +587,7 @@ proc list*(client: ImapClient | AsyncImapClient, reference: string = "\"\"", mai
     result = await client.send("LIST " & reference & " " & mailbox, listener)
 
 
-proc lsub*(client: ImapClient | AsyncImapClient, reference: string = "\"\"", mailbox: string = "\"*\"", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc lsub*(client: ImapClient | AsyncImapClient, reference: string = "\"\"", mailbox: string = "\"*\"", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.9. LSUB Command
     ##
     ## The LSUB command returns a subset of names from the set of names
@@ -620,7 +620,7 @@ type StatusItem* = enum
     siUnseen = "UNSEEN"
 
 
-proc status*(client: ImapClient | AsyncImapClient, mailbox: string, items: set[StatusItem] = {siMessages}, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc status*(client: ImapClient | AsyncImapClient, mailbox: string, items: set[StatusItem] = {siMessages}, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.10. STATUS Command
     ## 
     ## The STATUS command requests the status of the indicated mailbox.
@@ -666,7 +666,7 @@ proc status*(client: ImapClient | AsyncImapClient, mailbox: string, items: set[S
     result = await client.send(cmd, listener)
 
 
-proc append*(client: ImapClient | AsyncImapClient, mailbox, flags, msg: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc append*(client: ImapClient | AsyncImapClient, mailbox, flags, msg: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.3.11. APPEND Command
     ##
     ## The APPEND command appends the literal argument as a new message
@@ -723,7 +723,7 @@ proc append*(client: ImapClient | AsyncImapClient, mailbox, flags, msg: string, 
         result = client.checkLine(tag, line)
     
     
-proc check*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc check*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.4.1.  CHECK Command
     ##
     ## The CHECK command requests a checkpoint of the currently selected
@@ -742,7 +742,7 @@ proc check*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil):
     result = await client.send("CHECK", listener)
 
 
-proc close*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc close*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.4.2.  CLOSE Command
     ##
     ## The CLOSE command permanently removes all messages that have the
@@ -765,7 +765,7 @@ proc close*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil):
     result = await client.send("CLOSE", listener)
     
         
-proc expunge*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc expunge*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.4.3.  EXPUNGE Command
     ##
     ## The EXPUNGE command permanently removes all messages that have the
@@ -776,7 +776,7 @@ proc expunge*(client: ImapClient | AsyncImapClient, listener: ImapListener = nil
     result = await client.send("EXPUNGE", listener)
 
 
-proc search*(client: ImapClient | AsyncImapClient, query: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc search*(client: ImapClient | AsyncImapClient, query: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.4.4.  SEARCH Command
     ##
     ## The SEARCH command searches the mailbox for messages that match
@@ -796,7 +796,7 @@ proc search*(client: ImapClient | AsyncImapClient, query: string, listener: Imap
     result = await client.send("SEARCH " & query, listener)
 
 
-proc fetch*(client: ImapClient | AsyncImapClient, mid: string, item: string = "FULL", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc fetch*(client: ImapClient | AsyncImapClient, mid: string, item: string = "FULL", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.4.5.  FETCH Command
     ##
     ## The FETCH command retrieves data associated with a message in the
@@ -821,11 +821,11 @@ proc fetch*(client: ImapClient | AsyncImapClient, mid: string, item: string = "F
     result = await client.send("FETCH " & mid & " " & item, listener)
     
     
-proc fetch*(client: ImapClient | AsyncImapClient, startmid, endmid: string, item: string = "FULL", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc fetch*(client: ImapClient | AsyncImapClient, startmid, endmid: string, item: string = "FULL", listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     result = await client.send("FETCH " & startmid & ":" & endmid & " " & item, listener)
 
 
-proc store*(client: ImapClient | AsyncImapClient, mid: string, item, value: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc store*(client: ImapClient | AsyncImapClient, mid: string, item, value: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.4.6.  STORE Command
     ##
     ## The STORE command alters data associated with a message in the
@@ -845,11 +845,11 @@ proc store*(client: ImapClient | AsyncImapClient, mid: string, item, value: stri
     result = await client.send("STORE " & mid & " " & item & " " & value, listener)
 
 
-proc store*(client: ImapClient | AsyncImapClient, startmid, endmid: string, item, value: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc store*(client: ImapClient | AsyncImapClient, startmid, endmid: string, item, value: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     result = await client.send("STORE " & startmid & ":" & endmid & " " & item & " " & value, listener)
 
 
-proc copy*(client: ImapClient | AsyncImapClient, mid: string, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc copy*(client: ImapClient | AsyncImapClient, mid: string, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     ## 6.4.7.  COPY Command
     ##
     ## The COPY command copies the specified message(s) to the end of the
@@ -872,5 +872,5 @@ proc copy*(client: ImapClient | AsyncImapClient, mid: string, mailbox: string, l
     result = await client.send("COPY " & mid & " " & mailbox, listener)
     
 
-proc copy*(client: ImapClient | AsyncImapClient, startmid, endmid: string, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync, discardable.} =
+proc copy*(client: ImapClient | AsyncImapClient, startmid, endmid: string, mailbox: string, listener: ImapListener = nil): Future[ImapCommandStatus] {.multisync.} =
     result = await client.send("COPY " & startmid & ":" & endmid & " " & mailbox, listener)
