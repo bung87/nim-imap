@@ -1,6 +1,4 @@
-## https://tools.ietf.org/html/rfc3501
-
-import net, asyncnet, asyncdispatch, strutils, tables
+import net, asyncnet, asyncdispatch, strutils, strformat, re, tables
 export Port
 
 const CRLF* = "\c\L"
@@ -11,8 +9,6 @@ type ImapCommandStatus* = enum
   icsBad
   icsNo
 
-type ImapListener = proc(line: string)
-
 type ImapClientBase*[SocketType] = ref object of RootObj
   socket*: SocketType
   ssl: bool
@@ -21,6 +17,7 @@ type ImapClientBase*[SocketType] = ref object of RootObj
 type ImapClient* = ImapClientBase[Socket]
 type AsyncImapClient* = ImapClientBase[AsyncSocket]
 
+# Helper procs
 proc newImapClient*(): ImapClient =
   ImapClient(socket: newSocket())
 
@@ -38,271 +35,237 @@ when defined(ssl):
     sslContext.wrapSocket(s)
     AsyncImapClient(socket: s, ssl: true)
 
-proc ssl*(client: ImapClientBase): bool =
-  client.ssl
-
-proc checkLine(client: ImapClientBase, tag, line: string): ImapCommandStatus =
-  result = icsContinue
-
-  var ind = 0
-  while ind < tag.len:
-    if tag[ind] != line[ind]:
-      return
-    ind.inc
-  ind.inc
-
-  case line[ind]
-  of 'O':
-    if line[ind + 1] == 'K':
-      result = icsOk
-  of 'B':
-    if line[ind + 1] == 'A' and line[ind + 2] == 'D':
-      result = icsBad
-  of 'N':
-    if line[ind + 1] == 'O':
-      result = icsNo
-  else:
-    discard
-
 proc genTag(client: ImapClientBase): string =
   result = $client.tag
   client.tag.inc
 
-proc getData(
-    client: ImapClient | AsyncImapClient, tag: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  while true:
-    var line = (await client.socket.recvLine()).strip()
-    result = client.checkLine(tag, line)
+proc checkStatus(client: ImapClientBase, tag, line: string): ImapCommandStatus =
+  if line.startsWith(tag):
+    case line.split()[1]
+    of "OK":
+      return icsOk
+    of "BAD":
+      return icsBad
+    of "NO":
+      return icsNo
+  icsContinue
 
-    when defined(debugImap):
-      echo "IMAP GOT LINE: ", line
+proc readLiteral(
+    client: ImapClient | AsyncImapClient, size: int
+): Future[string] {.multisync.} =
+  result = newString(size)
+  var totalRead = 0
+  while totalRead < size:
+    let chunk = await client.socket.recv(min(size - totalRead, 4096))
+    copyMem(addr result[totalRead], unsafeAddr chunk[0], chunk.len)
+    totalRead += chunk.len
 
-    if line.len > 0:
-      if not listener.isNil:
-        listener(line)
-
-    if result != icsContinue:
-      break
-
-proc send(
-    client: ImapClient | AsyncImapClient, cmd: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  let tag = client.genTag()
-  let cmd = tag & " " & cmd & CRLF
-
-  when defined(debugImap):
-    echo "SEND CMD: ", cmd
-
-  await client.socket.send(cmd)
-  result = await client.getData(tag, listener)
-
+# Core commands
 proc connect*(
-    client: ImapClient | AsyncImapClient,
-    host: string,
-    port: Port,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
+    client: ImapClient | AsyncImapClient, host: string, port: Port
+): Future[bool] {.multisync.} =
   await client.socket.connect(host, port)
-  result = await client.getData("*", listener)
-
-proc capability*(
-    client: ImapClient | AsyncImapClient, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("CAPABILITY", listener)
-
-proc noop*(
-    client: ImapClient | AsyncImapClient, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("NOOP", listener)
-
-proc logout*(
-    client: ImapClient | AsyncImapClient, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("LOGOUT", listener)
-
-proc starttls*(
-    client: ImapClient | AsyncImapClient, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("STARTTLS", listener)
-
-proc authenticate*(
-    client: ImapClient | AsyncImapClient,
-    mechanism, data: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  var cmd = "AUTHENTICATE " & mechanism
-  if data.len > 0:
-    cmd &= " " & data
-  result = await client.send(cmd, listener)
+  let greeting = await client.socket.recvLine()
+  return greeting.startsWith("* OK")
 
 proc login*(
-    client: ImapClient | AsyncImapClient,
-    username, password: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("LOGIN " & username & " " & password, listener)
-
-proc select*(
-    client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("SELECT " & mailbox, listener)
-
-proc examine*(
-    client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("EXAMINE " & mailbox, listener)
-
-proc create*(
-    client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("CREATE " & mailbox, listener)
-
-proc delete*(
-    client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("DELETE " & mailbox, listener)
-
-proc rename*(
-    client: ImapClient | AsyncImapClient,
-    oldname, newname: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("RENAME " & oldname & " " & newname, listener)
-
-proc subscribe*(
-    client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("SUBSCRIBE " & mailbox, listener)
-
-proc unsubscribe*(
-    client: ImapClient | AsyncImapClient, mailbox: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("UNSUBSCRIBE " & mailbox, listener)
-
-proc list*(
-    client: ImapClient | AsyncImapClient,
-    reference: string = "\"\"",
-    mailbox: string = "\"*\"",
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("LIST " & reference & " " & mailbox, listener)
-
-proc lsub*(
-    client: ImapClient | AsyncImapClient,
-    reference: string = "\"\"",
-    mailbox: string = "\"*\"",
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("LSUB " & reference & " " & mailbox, listener)
-
-type StatusItem* = enum
-  siMessages = "MESSAGES"
-  siRecent = "RECENT"
-  siUidnext = "UIDNEXT"
-  siUidvalidity = "UIDVALIDITY"
-  siUnseen = "UNSEEN"
-
-proc status*(
-    client: ImapClient | AsyncImapClient,
-    mailbox: string,
-    items: set[StatusItem] = {siMessages},
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  var cmd = "STATUS " & mailbox & "("
-  for item in items:
-    cmd &= $item & " "
-  cmd[cmd.len - 1] = ')'
-  result = await client.send(cmd, listener)
-
-proc append*(
-    client: ImapClient | AsyncImapClient,
-    mailbox, flags, msg: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  var tag = client.genTag()
-  await client.socket.send(
-    tag & " " & " APPEND " & (
-      if flags != "": mailbox & " (" & flags & ")" else: mailbox
-    ) & " {" & $msg.len & "}"
-  )
-
-  let line = await client.socket.recvLine()
-
-  if line.startsWith("+"):
-    await client.socket.send(msg)
-    await client.socket.send(CRLF)
-    result = await client.getData(tag, listener)
-  else:
-    result = client.checkLine(tag, line)
-
-proc check*(
-    client: ImapClient | AsyncImapClient, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("CHECK", listener)
-
-proc close*(
-    client: ImapClient | AsyncImapClient, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("CLOSE", listener)
-
-proc expunge*(
-    client: ImapClient | AsyncImapClient, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("EXPUNGE", listener)
+    client: ImapClient | AsyncImapClient, username, password: string
+): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} LOGIN {username} {password}{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
 
 proc search*(
-    client: ImapClient | AsyncImapClient, query: string, listener: ImapListener = nil
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("SEARCH " & query, listener)
+    client: ImapClient | AsyncImapClient, query: string
+): Future[seq[string]] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} SEARCH {query}{CRLF}")
+
+  var ids: seq[string]
+  while true:
+    let line = (await client.socket.recvLine()).strip()
+    if line.startsWith("* SEARCH"):
+      ids.add(line[8 ..^ 1].splitWhitespace())
+    elif line.startsWith(tag):
+      if client.checkStatus(tag, line) == icsOk:
+        return ids
+      else:
+        return @[]
 
 proc fetch*(
-    client: ImapClient | AsyncImapClient,
-    mid: string,
-    item: string = "FULL",
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("FETCH " & mid & " " & item, listener)
+    client: ImapClient | AsyncImapClient, mid: string, item: string = "RFC822"
+): Future[string] {.multisync.} =
+  ## Fetches message content with proper literal handling using recv/recvLine
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} FETCH {mid} {item}{CRLF}")
 
-proc fetch*(
-    client: ImapClient | AsyncImapClient,
-    startmid, endmid: string,
-    item: string = "FULL",
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("FETCH " & startmid & ":" & endmid & " " & item, listener)
+  var content: string
+  var inLiteral = false
+  var literalSize = 0
+  let literalPattern = re(r"\{(\d+)\}$")  # Match {size} at end of line
 
-proc store*(
-    client: ImapClient | AsyncImapClient,
-    mid: string,
-    item, value: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("STORE " & mid & " " & item & " " & value, listener)
+  while true:
+    if inLiteral:
+      # Read literal content directly
+      content.add(await client.readLiteral(literalSize))
+      inLiteral = false
+      
+      # Read and check closing line
+      let line = (await client.socket.recvLine()).strip()
+      if line != ")":  # Handle unexpected format
+        content.add(line & CRLF)
+      continue
 
-proc store*(
-    client: ImapClient | AsyncImapClient,
-    startmid, endmid: string,
-    item, value: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send(
-    "STORE " & startmid & ":" & endmid & " " & item & " " & value, listener
-  )
+    let line = await client.socket.recvLine()
+    if line.len == 0:
+      continue
 
-proc copy*(
-    client: ImapClient | AsyncImapClient,
-    mid: string,
-    mailbox: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result = await client.send("COPY " & mid & " " & mailbox, listener)
+    if line.startsWith(tag):
+      if client.checkStatus(tag, line) == icsOk:
+        break
+      else:
+        return ""
 
-proc copy*(
-    client: ImapClient | AsyncImapClient,
-    startmid, endmid: string,
-    mailbox: string,
-    listener: ImapListener = nil,
-): Future[ImapCommandStatus] {.multisync.} =
-  result =
-    await client.send("COPY " & startmid & ":" & endmid & " " & mailbox, listener)
+    # Check for literal specification at end of line
+    var matches: array[1, string]
+    if line.find(literalPattern, matches) != -1:
+      literalSize = parseInt(matches[0])
+      inLiteral = true
+      
+      # Add prefix before literal marker
+      let prefix = line[0 ..< line.find('{')]
+      if prefix.len > 0:
+        content.add(prefix.strip() & CRLF)
+      continue
+
+    # Handle continuation response
+    if line.startsWith("+"):
+      literalSize = parseInt(line[1..^1].strip())
+      content.add(await client.readLiteral(literalSize))
+      continue
+
+    # Regular line processing
+    content.add(line)
+
+  return content
+
+proc logout*(client: ImapClient | AsyncImapClient): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} LOGOUT{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
+
+proc capability*(client: ImapClient | AsyncImapClient): Future[seq[string]] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} CAPABILITY{CRLF}")
+  
+  var caps: seq[string]
+  while true:
+    let line = (await client.socket.recvLine()).strip()
+    if line.startsWith("* CAPABILITY"):
+      caps = line[12..^1].splitWhitespace()
+    elif line.startsWith(tag):
+      return if client.checkStatus(tag, line) == icsOk: caps else: @[]
+
+proc select*(client: ImapClient | AsyncImapClient, mailbox: string): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} SELECT {mailbox}{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
+
+proc create*(client: ImapClient | AsyncImapClient, mailbox: string): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} CREATE {mailbox}{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
+
+proc delete*(client: ImapClient | AsyncImapClient, mailbox: string): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} DELETE {mailbox}{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
+
+proc list*(client: ImapClient | AsyncImapClient, reference: string = "", mailbox: string = "*"): Future[seq[string]] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} LIST {reference} {mailbox}{CRLF}")
+  
+  var folders: seq[string]
+  while true:
+    let line = (await client.socket.recvLine()).strip()
+    if line.startsWith("* LIST"):
+      folders.add(line)
+    elif line.startsWith(tag):
+      return if client.checkStatus(tag, line) == icsOk: folders else: @[]
+
+proc expunge*(client: ImapClient | AsyncImapClient): Future[seq[string]] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} EXPUNGE{CRLF}")
+  
+  var expunged: seq[string]
+  while true:
+    let line = (await client.socket.recvLine()).strip()
+    if line.startsWith("*"):
+      expunged.add(line)
+    elif line.startsWith(tag):
+      return if client.checkStatus(tag, line) == icsOk: expunged else: @[]
+
+proc store*(client: ImapClient | AsyncImapClient, mid: string, flags: string): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} STORE {mid} FLAGS {flags}{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
+
+proc copy*(client: ImapClient | AsyncImapClient, mid: string, mailbox: string): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} COPY {mid} {mailbox}{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
+
+proc noop*(client: ImapClient | AsyncImapClient): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} NOOP{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
+
+proc status*(client: ImapClient | AsyncImapClient, mailbox: string): Future[Table[string, int]] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} STATUS {mailbox} (MESSAGES RECENT UIDNEXT UIDVALIDITY UNSEEN){CRLF}")
+  
+  var stats = initTable[string, int]()
+  while true:
+    let line = (await client.socket.recvLine()).strip()
+    if line.startsWith("* STATUS"):
+      let parts = line.split({' ', '('})[3..^1]
+      for i in countup(0, parts.len-1, 2):
+        stats[parts[i]] = parseInt(parts[i+1])
+    elif line.startsWith(tag):
+      if client.checkStatus(tag, line) == icsOk:
+        return stats
+      else:
+        return initTable[string, int]()
+
+proc close*(client: ImapClient | AsyncImapClient): Future[bool] {.multisync.} =
+  let tag = client.genTag()
+  await client.socket.send(&"{tag} CLOSE{CRLF}")
+  while true:
+    let line = await client.socket.recvLine()
+
+    if line.startsWith(tag):
+      return client.checkStatus(tag, line) == icsOk
